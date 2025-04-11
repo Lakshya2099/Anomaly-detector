@@ -27,7 +27,7 @@ export default function DataSourceManager({
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(null)
 
   // Get icon for data source type
   const getDataSourceIcon = (type) => {
@@ -103,6 +103,20 @@ export default function DataSourceManager({
     }
   }
 
+  // Handle adding a data source
+  const handleAddDataSource = async (id, type, config) => {
+    try {
+      const result = await onAddDataSource(id, type, config)
+      if (result) {
+        setShowAddDialog(false)
+      }
+      return result
+    } catch (error) {
+      console.error("Error adding data source:", error)
+      return false
+    }
+  }
+
   return (
     <>
       <Card className="w-full">
@@ -147,17 +161,13 @@ export default function DataSourceManager({
                       {getDataSourceIcon(source.id)}
                     </div>
                     <div>
-                      <h4 className="font-medium">{source.source?.name || source.id}</h4>
-                      <p className="text-sm text-muted-foreground">
-                        {source.source?.description || "Network data source"}
-                      </p>
+                      <h4 className="font-medium">{source.name || source.id}</h4>
+                      <p className="text-sm text-muted-foreground">{source.description || "Network data source"}</p>
                     </div>
                   </div>
 
                   <div className="flex items-center space-x-2">
-                    <Badge variant={getStatusVariant(source.source?.getStatus())}>
-                      {source.source?.getStatus()?.status || "Unknown"}
-                    </Badge>
+                    <Badge variant={getStatusVariant({ status: source.status })}>{source.status || "Unknown"}</Badge>
 
                     {source.id !== activeSourceId && (
                       <Button
@@ -216,7 +226,7 @@ export default function DataSourceManager({
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent className="max-w-3xl">
           <DataSourceConfig
-            onAddDataSource={onAddDataSource}
+            onAddDataSource={handleAddDataSource}
             onCancel={() => setShowAddDialog(false)}
             dataSources={dataSources}
           />

@@ -78,7 +78,7 @@ export default function DataSourceConfig({ onAddDataSource, onCancel, dataSource
 
   // Handle form submission
   const handleSubmit = async (e) => {
-    e.preventDefault()
+    if (e) e.preventDefault()
     setIsLoading(true)
     setError("")
     setSuccess("")
@@ -173,7 +173,7 @@ export default function DataSourceConfig({ onAddDataSource, onCancel, dataSource
         <CardDescription>Configure a new network data source for anomaly detection</CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit}>
+        <form id="add-data-source-form" onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -465,18 +465,18 @@ export default function DataSourceConfig({ onAddDataSource, onCancel, dataSource
           </div>
         </form>
       </CardContent>
-      <CardFooter className="flex justify-end">
-        <Button type="button" variant="secondary" onClick={onCancel}>
+      <CardFooter className="flex justify-between">
+        <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" className="ml-2" onClick={handleSubmit} disabled={isLoading}>
+        <Button type="submit" form="add-data-source-form" disabled={isLoading}>
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Add Data Source
         </Button>
       </CardFooter>
 
       {error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="mt-4 mx-6 mb-2">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Error</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
@@ -484,7 +484,7 @@ export default function DataSourceConfig({ onAddDataSource, onCancel, dataSource
       )}
 
       {success && (
-        <Alert>
+        <Alert className="mt-4 mx-6 mb-2">
           <Check className="h-4 w-4" />
           <AlertTitle>Success</AlertTitle>
           <AlertDescription>{success}</AlertDescription>

@@ -5,7 +5,7 @@ import {
   type DataSourceStatus,
   type DataSourceType,
   createDataSource,
-} from "./"
+} from "./data-sources"
 
 // Data manager to handle multiple data sources and provide a unified interface
 export class DataManager {

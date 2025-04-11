@@ -7,13 +7,15 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { AlertCircle, Activity, Network, BarChart3, Clock, Database, Settings } from "lucide-react"
+import { AlertCircle, Activity, Network, BarChart3, Clock, Settings } from "lucide-react"
 import NetworkTrafficChart from "@/components/network-traffic-chart"
 import AnomalyTable from "@/components/anomaly-table"
-import DataSourceManager from "@/components/data-source-manager"
 import StatusIndicator from "@/components/status-indicator"
 import { useToast } from "@/hooks/use-toast"
 import { useDataSource } from "@/hooks/use-data-source"
+import DataSourceManager from "@/components/data-source-manager"
+import ThemeToggle from "@/components/theme-toggle"
+import TechnologyStack from "@/components/technology-stack"
 
 export default function Dashboard() {
   const [timeRange, setTimeRange] = useState("1h")
@@ -28,12 +30,11 @@ export default function Dashboard() {
     anomalies,
     dataSources,
     activeSourceId,
-    error,
     connect,
     disconnect,
+    setActiveSource,
     addDataSource,
     removeDataSource,
-    setActiveSource,
   } = useDataSource()
 
   useEffect(() => {
@@ -53,26 +54,37 @@ export default function Dashboard() {
       if (latestAnomaly.isNew) {
         toast({
           title: "Anomaly Detected",
-          description: `${formatAnomalyType(latestAnomaly.type)} anomaly detected at ${new Date(latestAnomaly.timestamp).toLocaleTimeString()}`,
+          description: `${latestAnomaly.type} anomaly detected at ${new Date(latestAnomaly.timestamp).toLocaleTimeString()}`,
           variant: "destructive",
         })
       }
     }
   }, [anomalies, toast])
 
-  // Show error toast if there's an error
-  useEffect(() => {
-    if (error) {
-      toast({
-        title: "Error",
-        description: error,
-        variant: "destructive",
-      })
-    }
-  }, [error, toast])
-
   // Filter anomalies based on selected type
   const filteredAnomalies = anomalies.filter((anomaly) => anomalyType === "all" || anomaly.type === anomalyType)
+
+  // Handle adding a data source
+  const handleAddDataSource = async (id, type, config) => {
+    try {
+      const result = await addDataSource(id, type, config)
+      if (result) {
+        toast({
+          title: "Data Source Added",
+          description: `Data source "${id}" has been added successfully.`,
+          variant: "default",
+        })
+      }
+      return result
+    } catch (error) {
+      toast({
+        title: "Error Adding Data Source",
+        description: error.message || "Failed to add data source",
+        variant: "destructive",
+      })
+      return false
+    }
+  }
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -206,10 +218,6 @@ export default function Dashboard() {
               <AlertCircle className="mr-2 h-4 w-4" />
               Anomaly Log
             </TabsTrigger>
-            <TabsTrigger value="datasources" className="flex items-center">
-              <Database className="mr-2 h-4 w-4" />
-              Data Sources
-            </TabsTrigger>
             <TabsTrigger value="settings" className="flex items-center">
               <Settings className="mr-2 h-4 w-4" />
               Settings
@@ -240,8 +248,6 @@ export default function Dashboard() {
                 <SelectItem value="connection_flood">Connection Flood</SelectItem>
                 <SelectItem value="packet_drop">Packet Drop</SelectItem>
                 <SelectItem value="latency_spike">Latency Spike</SelectItem>
-                <SelectItem value="bandwidth_anomaly">Bandwidth Anomaly</SelectItem>
-                <SelectItem value="error_rate_increase">Error Rate Increase</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -275,26 +281,39 @@ export default function Dashboard() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="datasources" className="mt-0">
-          <DataSourceManager
-            dataSources={dataSources}
-            activeSourceId={activeSourceId}
-            onAddDataSource={addDataSource}
-            onRemoveDataSource={removeDataSource}
-            onSetActiveSource={setActiveSource}
-          />
-        </TabsContent>
-
         <TabsContent value="settings" className="mt-0">
-          <Card>
-            <CardHeader>
-              <CardTitle>Settings</CardTitle>
-              <CardDescription>Configure application settings</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">Settings panel is under development.</p>
-            </CardContent>
-          </Card>
+          <div className="grid grid-cols-1 gap-6">
+            <DataSourceManager
+              dataSources={dataSources}
+              activeSourceId={activeSourceId}
+              onAddDataSource={handleAddDataSource}
+              onRemoveDataSource={removeDataSource}
+              onSetActiveSource={setActiveSource}
+            />
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Application Settings</CardTitle>
+                <CardDescription>Customize your application experience</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-lg font-medium mb-2">Theme</h3>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Application Theme</span>
+                      <ThemeToggle />
+                    </div>
+                  </div>
+
+                  <div className="border-t pt-4">
+                    <h3 className="text-lg font-medium mb-2">About</h3>
+                    <TechnologyStack />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>
@@ -308,14 +327,9 @@ function getMostCommonAnomalyType(anomalies) {
     return acc
   }, {})
 
-  return formatAnomalyType(Object.entries(typeCounts).sort((a, b) => b[1] - a[1])[0][0])
-}
-
-function formatAnomalyType(type) {
-  return type
-    .split("_")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ")
+  return Object.entries(typeCounts)
+    .sort((a, b) => b[1] - a[1])[0][0]
+    .replace("_", " ")
 }
 
 function getSystemStatus(networkData, anomalies) {

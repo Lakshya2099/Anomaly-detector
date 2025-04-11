@@ -4,8 +4,9 @@ import { useState } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { AlertCircle, AlertTriangle, Info, ArrowUpDown, Eye } from "lucide-react"
+import { AlertCircle, AlertTriangle, Info, ArrowUpDown, Eye, Download } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { generateAnomalyPDF } from "@/lib/pdf-generator"
 
 export default function AnomalyTable({ anomalies }) {
   const [sortField, setSortField] = useState("timestamp")
@@ -42,6 +43,11 @@ export default function AnomalyTable({ anomalies }) {
     setDialogOpen(true)
   }
 
+  // Download anomaly report as PDF
+  const downloadAnomalyReport = () => {
+    generateAnomalyPDF(sortedAnomalies)
+  }
+
   if (anomalies.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-10 text-center">
@@ -54,6 +60,13 @@ export default function AnomalyTable({ anomalies }) {
 
   return (
     <div>
+      <div className="flex justify-end mb-4">
+        <Button variant="outline" size="sm" onClick={downloadAnomalyReport} className="flex items-center gap-1">
+          <Download className="h-4 w-4" />
+          Download PDF Report
+        </Button>
+      </div>
+
       <Table>
         <TableHeader>
           <TableRow>

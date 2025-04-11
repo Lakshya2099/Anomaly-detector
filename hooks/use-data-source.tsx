@@ -106,9 +106,9 @@ export function useDataSource() {
   // Add a new data source
   const addDataSource = useCallback(async (id: string, type: string, config?: any) => {
     try {
-      await dataManager.addDataSource(id, type as DataSourceType, config)
+      const result = await dataManager.addDataSource(id, type as DataSourceType, config)
       updateDataSourcesList()
-      return true
+      return result
     } catch (error) {
       console.error("Error adding data source:", error)
       setError(error instanceof Error ? error.message : "Failed to add data source")
@@ -167,14 +167,14 @@ export function useDataSource() {
     const handleAnomaly = (anomaly: AnomalyEvent) => {
       setAnomalies((prev) => {
         // Mark the new anomaly
-        anomaly.isNew = true
+        const newAnomaly = { ...anomaly, isNew: true }
 
         // Add to the beginning of the array (newest first)
-        const updatedAnomalies = [anomaly, ...prev]
+        const updatedAnomalies = [newAnomaly, ...prev]
 
         // Remove the "isNew" flag after 5 seconds
         setTimeout(() => {
-          setAnomalies((current) => current.map((a) => (a.id === anomaly.id ? { ...a, isNew: false } : a)))
+          setAnomalies((current) => current.map((a) => (a.id === newAnomaly.id ? { ...a, isNew: false } : a)))
         }, 5000)
 
         return updatedAnomalies
@@ -213,6 +213,7 @@ export function useDataSource() {
     }))
 
     setAnomalies(dataManager.getAnomalyHistory())
+    updateDataSourcesList()
 
     // Clean up on unmount
     return () => {

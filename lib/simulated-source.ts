@@ -1,87 +1,86 @@
-import type { NetworkDataSource, DataSourceStatus, NetworkDataPoint, AnomalyEvent } from "./index"
+import type { NetworkDataSource, NetworkDataPoint, AnomalyEvent, DataSourceStatus } from "./index"
 
 export class SimulatedDataSource implements NetworkDataSource {
+  name = "Simulated Data"
+  description = "Generate simulated network data for testing and development"
+
   private running = false
-  private status: DataSourceStatus = { status: "stopped" }
+  private interval: NodeJS.Timeout | null = null
+  private config = {
+    updateInterval: 1000,
+    anomalyProbability: 0.05,
+    simulateNetworkPatterns: true,
+    simulateTimeOfDayPatterns: true,
+  }
+
   private dataCallbacks: ((data: NetworkDataPoint) => void)[] = []
   private anomalyCallbacks: ((anomaly: AnomalyEvent) => void)[] = []
   private errorCallbacks: ((error: Error) => void)[] = []
   private statusCallbacks: ((status: DataSourceStatus) => void)[] = []
-  private config: SimulatedConfig = {
-    updateInterval: 1000, // ms
-    anomalyProbability: 0.05, // 5% chance per update
-    simulateNetworkPatterns: true,
-    simulateTimeOfDayPatterns: true,
+
+  private status: DataSourceStatus = {
+    status: "stopped",
+    metrics: {
+      dataPointsProcessed: 0,
+      anomaliesDetected: 0,
+      errorCount: 0,
+      uptime: 0,
+    },
   }
-  private metrics = {
-    dataPointsProcessed: 0,
-    anomaliesDetected: 0,
-    errorCount: 0,
-    uptime: 0,
-  }
+
   private startTime = 0
-  private updateInterval: NodeJS.Timeout | null = null
-  private trafficHistory: NetworkDataPoint[] = []
+  private lastUpdate = 0
 
-  name = "Simulated Data"
-  description = "Generate simulated network data for testing and development"
+  // Base values for simulation
+  private basePacketsPerSecond = 500
+  private baseBandwidth = 50
+  private baseActiveConnections = 100
+  private baseErrorRate = 1
 
-  async initialize(config: SimulatedConfig): Promise<boolean> {
-    try {
-      this.updateStatus("initializing", "Initializing simulated data source...")
+  // Variance parameters (as percentage of base)
+  private packetsVariance = 0.2
+  private bandwidthVariance = 0.2
+  private connectionsVariance = 0.3
+  private errorRateVariance = 0.5
 
+  async initialize(config?: any): Promise<boolean> {
+    if (config) {
       this.config = { ...this.config, ...config }
-
-      // Simulate initialization delay
-      await new Promise((resolve) => setTimeout(resolve, 500))
-
-      console.log(`[Simulated] Initialized with update interval: ${this.config.updateInterval}ms`)
-
-      this.updateStatus("stopped", "Simulated data source initialized and ready")
-      return true
-    } catch (error) {
-      this.handleError(error as Error)
-      return false
     }
+
+    this.updateStatus("initializing")
+
+    // Simulate initialization delay
+    await new Promise((resolve) => setTimeout(resolve, 500))
+
+    this.updateStatus("stopped")
+    return true
   }
 
   async start(): Promise<void> {
     if (this.running) return
 
-    try {
-      this.updateStatus("initializing", "Starting simulated data source...")
+    this.running = true
+    this.startTime = Date.now()
+    this.lastUpdate = Date.now()
+    this.updateStatus("running")
 
-      this.startTime = Date.now()
-      this.running = true
-
-      // Initialize with some historical data
-      this.trafficHistory = this.generateInitialData()
-
-      // Start generating data
-      this.updateInterval = setInterval(() => {
-        this.generateData()
-      }, this.config.updateInterval)
-
-      this.updateStatus("running", "Simulated data source running")
-    } catch (error) {
-      this.handleError(error as Error)
-    }
+    // Start generating data
+    this.interval = setInterval(() => {
+      this.generateData()
+    }, this.config.updateInterval)
   }
 
   async stop(): Promise<void> {
     if (!this.running) return
 
-    try {
-      if (this.updateInterval) {
-        clearInterval(this.updateInterval)
-        this.updateInterval = null
-      }
-
-      this.running = false
-      this.updateStatus("stopped", "Simulated data source stopped")
-    } catch (error) {
-      this.handleError(error as Error)
+    this.running = false
+    if (this.interval) {
+      clearInterval(this.interval)
+      this.interval = null
     }
+
+    this.updateStatus("stopped")
   }
 
   isRunning(): boolean {
@@ -91,14 +90,10 @@ export class SimulatedDataSource implements NetworkDataSource {
   getStatus(): DataSourceStatus {
     // Update uptime if running
     if (this.running) {
-      this.metrics.uptime = Math.floor((Date.now() - this.startTime) / 1000)
+      this.status.metrics!.uptime = Math.floor((Date.now() - this.startTime) / 1000)
     }
 
-    return {
-      ...this.status,
-      lastUpdated: new Date(),
-      metrics: { ...this.metrics },
-    }
+    return this.status
   }
 
   onData(callback: (data: NetworkDataPoint) => void): void {
@@ -117,19 +112,22 @@ export class SimulatedDataSource implements NetworkDataSource {
     this.statusCallbacks.push(callback)
   }
 
-  getConfiguration(): SimulatedConfig {
+  getConfiguration(): any {
     return { ...this.config }
   }
 
-  async updateConfiguration(config: Partial<SimulatedConfig>): Promise<boolean> {
+  async updateConfiguration(config: any): Promise<boolean> {
     const wasRunning = this.running
 
+    // Stop if running
     if (wasRunning) {
       await this.stop()
     }
 
+    // Update config
     this.config = { ...this.config, ...config }
 
+    // Restart if it was running
     if (wasRunning) {
       await this.start()
     }
@@ -137,140 +135,52 @@ export class SimulatedDataSource implements NetworkDataSource {
     return true
   }
 
-  private updateStatus(status: "initializing" | "running" | "stopped" | "error", message?: string): void {
-    this.status = {
-      status,
-      message,
-      lastUpdated: new Date(),
-      metrics: { ...this.metrics },
-    }
-
-    this.statusCallbacks.forEach((callback) => callback(this.status))
-  }
-
-  private handleError(error: Error): void {
-    this.metrics.errorCount++
-    this.updateStatus("error", error.message)
-    this.errorCallbacks.forEach((callback) => callback(error))
-  }
-
-  private generateInitialData(): NetworkDataPoint[] {
-    const history: NetworkDataPoint[] = []
-    const now = Date.now()
-
-    // Generate 60 data points (1 minute of history)
-    for (let i = 0; i < 60; i++) {
-      history.push(this.generateDataPoint(now - (60 - i) * 1000))
-    }
-
-    return history
-  }
-
   private generateData(): void {
-    if (!this.running) return
-
     try {
-      const now = Date.now()
+      const timestamp = Date.now()
 
-      // Generate a new data point
-      const dataPoint = this.generateDataPoint(now)
-
-      // Add to history and limit size
-      this.trafficHistory.push(dataPoint)
-      if (this.trafficHistory.length > 300) {
-        // Keep 5 minutes of history
-        this.trafficHistory.shift()
+      // Generate normal network data with random variations
+      const data: NetworkDataPoint = {
+        timestamp,
+        packetsPerSecond: this.generateValue(this.basePacketsPerSecond, this.packetsVariance),
+        bandwidth: this.generateValue(this.baseBandwidth, this.bandwidthVariance),
+        activeConnections: this.generateValue(this.baseActiveConnections, this.connectionsVariance),
+        errorRate: this.generateValue(this.baseErrorRate, this.errorRateVariance, 2),
       }
 
-      this.metrics.dataPointsProcessed++
-      this.dataCallbacks.forEach((callback) => callback(dataPoint))
+      // Update metrics
+      this.status.metrics!.dataPointsProcessed++
+      this.lastUpdate = timestamp
 
-      // Randomly detect anomalies
+      // Notify data callbacks
+      this.dataCallbacks.forEach((callback) => callback(data))
+
+      // Determine if we should generate an anomaly
       if (Math.random() < this.config.anomalyProbability) {
-        this.generateAnomaly(dataPoint)
+        const anomaly = this.generateAnomaly()
+        this.status.metrics!.anomaliesDetected++
+        this.anomalyCallbacks.forEach((callback) => callback(anomaly))
       }
     } catch (error) {
-      this.handleError(error as Error)
+      this.status.metrics!.errorCount++
+      this.errorCallbacks.forEach((callback) => callback(error instanceof Error ? error : new Error(String(error))))
     }
   }
 
-  private generateDataPoint(timestamp: number): NetworkDataPoint {
-    // Base values
-    let packetsPerSecond = 500
-    let bandwidth = 50
-    let activeConnections = 100
-    let errorRate = 1
+  private generateValue(baseValue: number, varianceFactor: number, decimals = 0): number {
+    // Generate a value between (1-variance) and (1+variance) of the base value
+    const randomFactor = 1 - varianceFactor + Math.random() * varianceFactor * 2
+    const value = baseValue * randomFactor
 
-    // Add time-of-day pattern if enabled
-    if (this.config.simulateTimeOfDayPatterns) {
-      const date = new Date(timestamp)
-      const hour = date.getHours()
-
-      // Simulate higher traffic during business hours
-      if (hour >= 9 && hour <= 17) {
-        packetsPerSecond += 200
-        bandwidth += 20
-        activeConnections += 50
-      }
-
-      // Simulate peak at lunch time
-      if (hour >= 12 && hour <= 13) {
-        packetsPerSecond += 100
-        bandwidth += 10
-        activeConnections += 25
-      }
-
-      // Simulate low traffic at night
-      if (hour >= 0 && hour <= 5) {
-        packetsPerSecond -= 200
-        bandwidth -= 20
-        activeConnections -= 50
-      }
-    }
-
-    // Add network patterns if enabled
-    if (this.config.simulateNetworkPatterns) {
-      // Use sine waves to simulate cyclical patterns
-      const timeFactor = timestamp / 1000 / 60 // minutes
-      packetsPerSecond += Math.sin(timeFactor * 0.1) * 100
-      bandwidth += Math.sin(timeFactor * 0.05) * 10
-      activeConnections += Math.sin(timeFactor * 0.2) * 20
-      errorRate += Math.sin(timeFactor * 0.3) * 0.5
-    }
-
-    // Add random variation
-    packetsPerSecond += (Math.random() - 0.5) * 100
-    bandwidth += (Math.random() - 0.5) * 10
-    activeConnections += (Math.random() - 0.5) * 20
-    errorRate += (Math.random() - 0.5) * 0.5
-
-    // Ensure values are reasonable
-    packetsPerSecond = Math.max(50, packetsPerSecond)
-    bandwidth = Math.max(5, bandwidth)
-    activeConnections = Math.max(10, activeConnections)
-    errorRate = Math.max(0.1, errorRate)
-
-    return {
-      timestamp,
-      packetsPerSecond: Math.floor(packetsPerSecond),
-      bandwidth: Number(bandwidth.toFixed(2)),
-      activeConnections: Math.floor(activeConnections),
-      errorRate: Number(errorRate.toFixed(2)),
-      source: "simulated",
-      additionalMetrics: {
-        tcpConnections: Math.floor(activeConnections * 0.7),
-        udpConnections: Math.floor(activeConnections * 0.3),
-        avgPacketSize: Math.floor(800 + Math.random() * 400), // bytes
-      },
-    }
+    // Round to specified decimal places
+    return Number(value.toFixed(decimals))
   }
 
-  private generateAnomaly(dataPoint: NetworkDataPoint): void {
+  private generateAnomaly(): AnomalyEvent {
     const anomalyTypes = ["traffic_spike", "connection_flood", "packet_drop", "latency_spike"]
-    const type = anomalyTypes[Math.floor(Math.random() * anomalyTypes.length)]
-
-    const severities: ("info" | "warning" | "critical")[] = ["info", "warning", "critical"]
+    const severities = ["info", "warning", "critical"] as const
     const severityWeights = [0.5, 0.3, 0.2] // 50% info, 30% warning, 20% critical
+    const sources = ["192.168.1.100", "10.0.0.25", "172.16.0.5", "External Gateway", "Internal Router"]
 
     // Weighted random selection for severity
     const randomSeverity = () => {
@@ -283,14 +193,16 @@ export class SimulatedDataSource implements NetworkDataSource {
       return severities[0]
     }
 
+    const type = anomalyTypes[Math.floor(Math.random() * anomalyTypes.length)]
     const severity = randomSeverity()
+    const source = sources[Math.floor(Math.random() * sources.length)]
 
+    // Generate description and recommended action based on type and severity
+    let description = ""
+    let recommendedAction = ""
     const threshold = Math.floor(Math.random() * 100) + 100
     const actualValue = threshold * (1 + (Math.random() * 0.5 + 0.5))
     const deviation = Math.floor((actualValue / threshold - 1) * 100)
-
-    let description = ""
-    let recommendedAction = ""
 
     switch (type) {
       case "traffic_spike":
@@ -301,7 +213,7 @@ export class SimulatedDataSource implements NetworkDataSource {
             : "Monitor traffic patterns and check for scheduled data transfers."
         break
       case "connection_flood":
-        description = `Unusual number of connection attempts detected. Connection rate exceeded threshold by ${deviation}%.`
+        description = `Unusual number of connection attempts detected from ${source}. Connection rate exceeded threshold by ${deviation}%.`
         recommendedAction =
           severity === "critical"
             ? "Block source IP and investigate for potential security breach."
@@ -323,12 +235,12 @@ export class SimulatedDataSource implements NetworkDataSource {
         break
     }
 
-    const anomaly: AnomalyEvent = {
+    return {
       id: `anomaly-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       timestamp: Date.now(),
       type,
       severity,
-      source: "simulated",
+      source,
       description,
       metrics: {
         threshold,
@@ -337,15 +249,16 @@ export class SimulatedDataSource implements NetworkDataSource {
       },
       recommendedAction,
     }
-
-    this.metrics.anomaliesDetected++
-    this.anomalyCallbacks.forEach((callback) => callback(anomaly))
   }
-}
 
-export interface SimulatedConfig {
-  updateInterval: number
-  anomalyProbability: number
-  simulateNetworkPatterns: boolean
-  simulateTimeOfDayPatterns: boolean
+  private updateStatus(status: "initializing" | "running" | "stopped" | "error", message?: string): void {
+    this.status = {
+      ...this.status,
+      status,
+      message,
+      lastUpdated: new Date(),
+    }
+
+    this.statusCallbacks.forEach((callback) => callback(this.status))
+  }
 }
